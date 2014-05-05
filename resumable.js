@@ -429,41 +429,37 @@
 
         var testHandler = function(e){
           $.tested = true;
-          var status = $.status();
-          if(status=='success') {
-            $.callback(status, $.message());
-            $.resumableObj.uploadNextChunk();
+
+          var resumableChunkSize = $.getOpt('chunkSize');
+          var resumableCurrentChunkSize = $.endByte - $.startByte;
+          var resumableTotalSize = $.fileObjSize;
+
+          if ($.xhr.status==308) {
+
+            var range = this.getResponseHeader('Range');
+            var upperRange = range.slice(range.lastIndexOf('-')+1, range.length);
+
+            // Get the Range header eg "bytes=0-1000"
+            // Check to see if the end range is equal to
+            // the chunk # * resumableChunkSize + resumableCurrentChunkSize OR resumableTotalSize
+            if ( upperRange == ( $.offset * resumableChunkSize ) + resumableCurrentChunkSize || range == resumableTotalSize ) {
+              $.callback('success', 'Vimeo verified');
+              $.resumableObj.uploadNextChunk();
+            } else {
+              $.send();
+            }
           } else {
             $.send();
           }
         };
+
         $.xhr.addEventListener('load', testHandler, false);
         $.xhr.addEventListener('error', testHandler, false);
 
-        // Add data from the query options
-        var params = [];
-        var customQuery = $.getOpt('query');
-        if(typeof customQuery == 'function') customQuery = customQuery($.fileObj, $);
-        $h.each(customQuery, function(k,v){
-          params.push([encodeURIComponent(k), encodeURIComponent(v)].join('='));
-        });
-        // Add extra data to identify chunk
-        params.push(['resumableChunkNumber', encodeURIComponent($.offset+1)].join('='));
-        params.push(['resumableChunkSize', encodeURIComponent($.getOpt('chunkSize'))].join('='));
-        params.push(['resumableCurrentChunkSize', encodeURIComponent($.endByte - $.startByte)].join('='));
-        params.push(['resumableTotalSize', encodeURIComponent($.fileObjSize)].join('='));
-        params.push(['resumableType', encodeURIComponent($.fileObjType)].join('='));
-        params.push(['resumableIdentifier', encodeURIComponent($.fileObj.uniqueIdentifier)].join('='));
-        params.push(['resumableFilename', encodeURIComponent($.fileObj.fileName)].join('='));
-        params.push(['resumableRelativePath', encodeURIComponent($.fileObj.relativePath)].join('='));
         // Append the relevant chunk and send it
-        $.xhr.open('GET', $h.getTarget('test',params));
+        $.xhr.open('PUT', $h.getTarget('test', [] ));
         $.xhr.timeout = $.getOpt('xhrTimeout');
-        $.xhr.withCredentials = $.getOpt('withCredentials');
-        // Add data from header options
-        $h.each($.getOpt('headers'), function(k,v) {
-          $.xhr.setRequestHeader(k, v);
-        });
+        $.xhr.setRequestHeader('Content-Range', 'bytes */*');
         $.xhr.send(null);
       };
 
